@@ -1,12 +1,12 @@
 <?php
 
-namespace VendorName\Skeleton\Commands;
+namespace AwaisJameel\DiditLaravelClient\Commands;
 
 use Illuminate\Console\Command;
 
-class SkeletonCommand extends Command
+class DiditLaravelClientCommand extends Command
 {
-    public $signature = 'skeleton';
+    public $signature = 'didit-laravel-client';
 
     public $description = 'My command';
 
