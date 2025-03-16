@@ -2,9 +2,9 @@
 
 namespace AwaisJameel\DiditLaravelClient\Tests;
 
+use AwaisJameel\DiditLaravelClient\DiditLaravelClientServiceProvider;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Orchestra\Testbench\TestCase as Orchestra;
-use AwaisJameel\DiditLaravelClient\DiditLaravelClientServiceProvider;
 
 class TestCase extends Orchestra
 {

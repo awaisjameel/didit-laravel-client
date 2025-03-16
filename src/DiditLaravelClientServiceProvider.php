@@ -4,7 +4,6 @@ namespace AwaisJameel\DiditLaravelClient;
 
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
-use AwaisJameel\DiditLaravelClient\Commands\DiditLaravelClientCommand;
 
 class DiditLaravelClientServiceProvider extends PackageServiceProvider
 {
@@ -17,6 +16,6 @@ class DiditLaravelClientServiceProvider extends PackageServiceProvider
          */
         $package
             ->name('didit-laravel-client')
-            ->hasConfigFile("didit-laravel-client");
+            ->hasConfigFile('didit-laravel-client');
     }
 }
