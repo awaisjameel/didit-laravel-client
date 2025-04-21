@@ -2,69 +2,53 @@
 
 namespace AwaisJameel\DiditLaravelClient;
 
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Http\Client\PendingRequest;
-use Illuminate\Http\Client\RequestException;
 use Carbon\Carbon;
 use Exception;
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class DiditLaravelClient
 {
     /**
      * Client ID for DiDiT API
-     *
-     * @var string|null
      */
     protected ?string $clientId = null;
 
     /**
      * Client secret for DiDiT API
-     *
-     * @var string|null
      */
     protected ?string $clientSecret = null;
 
     /**
      * Base URL for DiDiT API
-     *
-     * @var string|null
      */
     protected ?string $baseUrl = null;
 
     /**
      * Auth URL for DiDiT API
-     *
-     * @var string|null
      */
     protected ?string $authUrl = null;
 
     /**
      * Secret for webhook verification
-     *
-     * @var string|null
      */
     protected ?string $webhookSecret = null;
 
     /**
      * Buffer time before token expiry (in seconds)
-     *
-     * @var int
      */
     protected int $tokenExpiryBuffer;
 
     /**
      * Request timeout (in seconds)
-     *
-     * @var int
      */
     protected int $timeout;
 
     /**
      * Debug mode flag
-     *
-     * @var bool
      */
     protected bool $debug;
 
@@ -81,7 +65,7 @@ class DiditLaravelClient
     /**
      * Create a new DiDiT client instance
      *
-     * @param array $config Client configuration
+     * @param  array  $config  Client configuration
      */
     public function __construct(array $config = [])
     {
@@ -104,7 +88,6 @@ class DiditLaravelClient
     /**
      * Validate required configuration
      *
-     * @return void
      * @throws Exception
      */
     protected function validateConfig(): void
@@ -129,8 +112,7 @@ class DiditLaravelClient
     /**
      * Create an HTTP client instance with common configuration
      *
-     * @param array $options Additional options
-     * @return PendingRequest
+     * @param  array  $options  Additional options
      */
     protected function createHttpClient(array $options = []): PendingRequest
     {
@@ -141,9 +123,8 @@ class DiditLaravelClient
     /**
      * Log debug messages if debug mode is enabled
      *
-     * @param string $message Debug message
-     * @param mixed $data Optional data to log
-     * @return void
+     * @param  string  $message  Debug message
+     * @param  mixed  $data  Optional data to log
      */
     protected function log(string $message, $data = null): void
     {
@@ -155,8 +136,8 @@ class DiditLaravelClient
     /**
      * Handle error reporting and formatting
      *
-     * @param Exception $exception Error object
-     * @param string $context Context where the error occurred
+     * @param  Exception  $exception  Error object
+     * @param  string  $context  Context where the error occurred
      * @return Exception Formatted error
      */
     protected function handleError(Exception $exception, string $context): Exception
@@ -174,6 +155,7 @@ class DiditLaravelClient
      * Get an access token, either from cache or by requesting a new one
      *
      * @return string The access token
+     *
      * @throws Exception If authentication fails
      */
     public function getAccessToken(): string
@@ -186,6 +168,7 @@ class DiditLaravelClient
             $this->tokenCache['expires_at'] > ($now + $this->tokenExpiryBuffer)
         ) {
             $this->log('Using cached access token');
+
             return $this->tokenCache['access_token'];
         }
 
@@ -211,7 +194,7 @@ class DiditLaravelClient
 
             $data = $response->json();
 
-            if (!isset($data['access_token'])) {
+            if (! isset($data['access_token'])) {
                 throw new Exception('Invalid response from auth server');
             }
 
@@ -230,11 +213,12 @@ class DiditLaravelClient
     /**
      * Make an authenticated API request to DiDiT
      *
-     * @param string $method HTTP method
-     * @param string $url Request URL
-     * @param array $options Request options
-     * @param string $context Context for error handling
+     * @param  string  $method  HTTP method
+     * @param  string  $url  Request URL
+     * @param  array  $options  Request options
+     * @param  string  $context  Context for error handling
      * @return mixed API response
+     *
      * @throws Exception If the request fails
      */
     protected function makeAuthenticatedRequest(
@@ -287,10 +271,11 @@ class DiditLaravelClient
     /**
      * Create a new verification session
      *
-     * @param string $callbackUrl The URL to redirect to after verification
-     * @param array|null $vendorData Optional custom data
-     * @param array $options Additional session options
+     * @param  string  $callbackUrl  The URL to redirect to after verification
+     * @param  array|null  $vendorData  Optional custom data
+     * @param  array  $options  Additional session options
      * @return array Session data
+     *
      * @throws Exception If session creation fails
      */
     public function createSession(
@@ -322,8 +307,9 @@ class DiditLaravelClient
     /**
      * Generate a PDF report for a session
      *
-     * @param string $sessionId The ID of the session
+     * @param  string  $sessionId  The ID of the session
      * @return string PDF content
+     *
      * @throws Exception If PDF generation fails
      */
     public function generateSessionPDF(string $sessionId): string
@@ -356,10 +342,11 @@ class DiditLaravelClient
     /**
      * Update the status of a session
      *
-     * @param string $sessionId The ID of the session
-     * @param string $newStatus The new status ('Approved' or 'Declined')
-     * @param string|null $comment Optional comment
+     * @param  string  $sessionId  The ID of the session
+     * @param  string  $newStatus  The new status ('Approved' or 'Declined')
+     * @param  string|null  $comment  Optional comment
      * @return array Updated session data
+     *
      * @throws Exception If status update fails
      */
     public function updateSessionStatus(
@@ -371,7 +358,7 @@ class DiditLaravelClient
             throw new Exception('sessionId is required');
         }
 
-        if (!in_array($newStatus, ['Approved', 'Declined'])) {
+        if (! in_array($newStatus, ['Approved', 'Declined'])) {
             throw new Exception('newStatus must be either "Approved" or "Declined"');
         }
 
@@ -394,8 +381,9 @@ class DiditLaravelClient
     /**
      * Retrieve details of an existing session
      *
-     * @param string $sessionId The ID of the session
+     * @param  string  $sessionId  The ID of the session
      * @return array Session data
+     *
      * @throws Exception If session retrieval fails
      */
     public function getSession(string $sessionId): array
@@ -415,9 +403,10 @@ class DiditLaravelClient
     /**
      * Verify the signature of a webhook payload
      *
-     * @param array $headers The headers from the webhook request
-     * @param string $rawBody The raw body of the webhook request
+     * @param  array  $headers  The headers from the webhook request
+     * @param  string  $rawBody  The raw body of the webhook request
      * @return array The parsed webhook event data
+     *
      * @throws Exception If signature verification fails
      */
     public function verifyWebhookSignature(array $headers, string $rawBody): array
@@ -430,7 +419,7 @@ class DiditLaravelClient
         $timestamp = $headers['x-timestamp'] ?? null;
 
         // Ensure all required data is present
-        if (!$signature || !$timestamp || empty($rawBody)) {
+        if (! $signature || ! $timestamp || empty($rawBody)) {
             throw new Exception('Missing required webhook verification data');
         }
 
@@ -446,7 +435,7 @@ class DiditLaravelClient
         $expectedSignature = hash_hmac('sha256', $rawBody, $this->webhookSecret);
 
         // Compare using hash_equals for timing attack protection
-        if (!hash_equals($expectedSignature, $signature)) {
+        if (! hash_equals($expectedSignature, $signature)) {
             throw new Exception('Invalid webhook signature');
         }
 
@@ -457,8 +446,9 @@ class DiditLaravelClient
     /**
      * Process a webhook request by verifying its signature and parsing the payload
      *
-     * @param Request $request The Laravel request object
+     * @param  Request  $request  The Laravel request object
      * @return array The parsed and verified webhook event data
+     *
      * @throws Exception If webhook processing fails
      */
     public function processWebhook(Request $request): array

@@ -1,8 +1,8 @@
 <?php
 
 use AwaisJameel\DiditLaravelClient\DiditLaravelClient;
-use Illuminate\Http\Request;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 
 beforeEach(function () {
     $this->client = new DiditLaravelClient([
@@ -45,7 +45,7 @@ it('rejects invalid webhook signatures', function () {
         'x-timestamp' => $this->timestamp,
     ];
 
-    expect(fn() => $this->client->verifyWebhookSignature($headers, $this->webhook_payload))
+    expect(fn () => $this->client->verifyWebhookSignature($headers, $this->webhook_payload))
         ->toThrow(Exception::class, 'Invalid webhook signature');
 });
 
@@ -57,7 +57,7 @@ it('rejects stale webhook timestamps', function () {
         'x-timestamp' => $staleTimestamp,
     ];
 
-    expect(fn() => $this->client->verifyWebhookSignature($headers, $this->webhook_payload))
+    expect(fn () => $this->client->verifyWebhookSignature($headers, $this->webhook_payload))
         ->toThrow(Exception::class, 'Request timestamp is stale');
 });
 

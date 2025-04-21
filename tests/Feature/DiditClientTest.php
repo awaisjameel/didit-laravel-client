@@ -1,7 +1,6 @@
 <?php
 
 use AwaisJameel\DiditLaravelClient\DiditLaravelClient;
-use AwaisJameel\DiditLaravelClient\Tests\TestCase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 
@@ -18,10 +17,10 @@ beforeEach(function () {
 });
 
 it('validates required configuration', function () {
-    expect(fn() => new DiditLaravelClient([]))
+    expect(fn () => new DiditLaravelClient([]))
         ->toThrow(Exception::class, 'DIDIT_CLIENT_ID is required');
 
-    expect(fn() => new DiditLaravelClient(['client_id' => 'test']))
+    expect(fn () => new DiditLaravelClient(['client_id' => 'test']))
         ->toThrow(Exception::class, 'DIDIT_CLIENT_SECRET is required');
 });
 
@@ -55,7 +54,7 @@ it('sends correct authentication headers', function () {
 
     Http::assertSent(function (Request $request) {
         $authHeader = $request->header('Authorization')[0] ?? '';
-        $expectedAuth = 'Basic ' . base64_encode('test-client-id:test-client-secret');
+        $expectedAuth = 'Basic '.base64_encode('test-client-id:test-client-secret');
 
         return $authHeader === $expectedAuth &&
             $request->header('Content-Type')[0] === 'application/x-www-form-urlencoded' &&

@@ -43,6 +43,6 @@ it('handles PDF generation errors', function () {
         'verification.didit.me/v1/session/*/generate-pdf*' => Http::response(null, 404),
     ]);
 
-    expect(fn() => $this->client->generateSessionPDF('invalid-session-id'))
+    expect(fn () => $this->client->generateSessionPDF('invalid-session-id'))
         ->toThrow(Exception::class);
 });
