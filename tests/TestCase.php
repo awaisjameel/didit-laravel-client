@@ -3,7 +3,6 @@
 namespace AwaisJameel\DiditLaravelClient\Tests;
 
 use AwaisJameel\DiditLaravelClient\DiditLaravelClientServiceProvider;
-use Illuminate\Database\Eloquent\Factories\Factory;
 use Orchestra\Testbench\TestCase as Orchestra;
 
 class TestCase extends Orchestra
@@ -11,10 +10,6 @@ class TestCase extends Orchestra
     protected function setUp(): void
     {
         parent::setUp();
-
-        Factory::guessFactoryNamesUsing(
-            fn (string $modelName) => 'AwaisJameel\\DiditLaravelClient\\Database\\Factories\\'.class_basename($modelName).'Factory'
-        );
     }
 
     protected function getPackageProviders($app)
@@ -26,12 +21,15 @@ class TestCase extends Orchestra
 
     public function getEnvironmentSetUp($app)
     {
-        config()->set('database.default', 'testing');
-
-        /*
-         foreach (\Illuminate\Support\Facades\File::allFiles(__DIR__ . '/database/migrations') as $migration) {
-            (include $migration->getRealPath())->up();
-         }
-         */
+        config()->set('didit-laravel-client', [
+            'client_id' => 'test-client-id',
+            'client_secret' => 'test-client-secret',
+            'base_url' => 'https://verification.didit.me',
+            'auth_url' => 'https://apx.didit.me',
+            'webhook_secret' => 'test-webhook-secret',
+            'timeout' => 10,
+            'token_expiry_buffer' => 300,
+            'debug' => false,
+        ]);
     }
 }
