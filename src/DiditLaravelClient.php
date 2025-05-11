@@ -199,7 +199,7 @@ class DiditLaravelClient
 
             $data = $response->json();
 
-            if (!isset($data['access_token'])) {
+            if (! isset($data['access_token'])) {
                 throw new Exception('Invalid response from auth server');
             }
 
@@ -363,7 +363,7 @@ class DiditLaravelClient
             throw new Exception('sessionId is required');
         }
 
-        if (!in_array($newStatus, ['Approved', 'Declined'])) {
+        if (! in_array($newStatus, ['Approved', 'Declined'])) {
             throw new Exception('newStatus must be either "Approved" or "Declined"');
         }
 
@@ -424,7 +424,7 @@ class DiditLaravelClient
         $timestamp = $headers['x-timestamp'] ?? null;
 
         // Ensure all required data is present
-        if (!$signature || !$timestamp || empty($rawBody)) {
+        if (! $signature || ! $timestamp || empty($rawBody)) {
             throw new Exception('Missing required webhook verification data');
         }
 
@@ -440,7 +440,7 @@ class DiditLaravelClient
         $expectedSignature = hash_hmac('sha256', $rawBody, $this->webhookSecret);
 
         // Compare using hash_equals for timing attack protection
-        if (!hash_equals($expectedSignature, $signature)) {
+        if (! hash_equals($expectedSignature, $signature)) {
             throw new Exception('Invalid webhook signature');
         }
 
