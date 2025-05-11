@@ -194,7 +194,7 @@ class DiditLaravelClient
 
             $data = $response->json();
 
-            if (! isset($data['access_token'])) {
+            if (!isset($data['access_token'])) {
                 throw new Exception('Invalid response from auth server');
             }
 
@@ -272,15 +272,15 @@ class DiditLaravelClient
      * Create a new verification session
      *
      * @param  string  $callbackUrl  The URL to redirect to after verification
-     * @param  array|null  $vendorData  Optional custom data
-     * @param  array  $options  Additional session options
-     * @return array Session data
+     * @param  string|null $vendorData  optional Unique identifier or data for the vendor, typically the identifier of the user trying to verify.
+     * @param  array  $options  Optional Additional session options "['features'=> 'OCR + NFC + FACE']", etc. If omitted, uses settings from console
+     * @return array  Session data
      *
      * @throws Exception If session creation fails
      */
     public function createSession(
         string $callbackUrl,
-        ?array $vendorData = null,
+        ?string $vendorData = null,
         array $options = []
     ): array {
         if (empty($callbackUrl)) {
@@ -358,7 +358,7 @@ class DiditLaravelClient
             throw new Exception('sessionId is required');
         }
 
-        if (! in_array($newStatus, ['Approved', 'Declined'])) {
+        if (!in_array($newStatus, ['Approved', 'Declined'])) {
             throw new Exception('newStatus must be either "Approved" or "Declined"');
         }
 
@@ -419,7 +419,7 @@ class DiditLaravelClient
         $timestamp = $headers['x-timestamp'] ?? null;
 
         // Ensure all required data is present
-        if (! $signature || ! $timestamp || empty($rawBody)) {
+        if (!$signature || !$timestamp || empty($rawBody)) {
             throw new Exception('Missing required webhook verification data');
         }
 
@@ -435,7 +435,7 @@ class DiditLaravelClient
         $expectedSignature = hash_hmac('sha256', $rawBody, $this->webhookSecret);
 
         // Compare using hash_equals for timing attack protection
-        if (! hash_equals($expectedSignature, $signature)) {
+        if (!hash_equals($expectedSignature, $signature)) {
             throw new Exception('Invalid webhook signature');
         }
 

@@ -71,13 +71,9 @@ $client = new DiditLaravelClient([
 ```php
 $session = $client->createSession(
     callbackUrl: 'https://your-app.com/verification/callback',
-    vendorData: [
-        'user_id' => '123',
-        'reference' => 'ORDER-456'
-    ],
+    vendorData: 101,
     options: [
-        'locale' => 'en',
-        'redirect_timeout' => 3600
+        'features'=> 'OCR + NFC + FACE'
     ]
 );
 

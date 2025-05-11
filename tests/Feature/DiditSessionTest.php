@@ -30,8 +30,8 @@ it('creates a verification session', function () {
 
     $session = $this->client->createSession(
         'https://example.com/callback',
-        ['custom' => 'data'],
-        ['locale' => 'en']
+        'user_identifier',
+        ['features' => 'OCR + NFC + FACE']
     );
 
     expect($session)
@@ -42,8 +42,8 @@ it('creates a verification session', function () {
         return $request->url() === 'https://verification.didit.me/v1/session/' &&
             $request->method() === 'POST' &&
             $request['callback'] === 'https://example.com/callback' &&
-            $request['vendor_data']['custom'] === 'data' &&
-            $request['locale'] === 'en';
+            $request['vendor_data'] === 'user_identifier' &&
+            $request['features'] === 'OCR + NFC + FACE';
     });
 });
 
