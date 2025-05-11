@@ -142,10 +142,15 @@ class DiditLaravelClient
      */
     protected function handleError(Exception $exception, string $context): Exception
     {
-        $errorMessage = "DiDiT {$context} error: {$exception->getMessage()}";
+        $errorMessage = "DiDit Error in {$context}: {$exception->getMessage()}";
 
         if ($exception instanceof RequestException) {
-            $this->log('API Error Details:', $exception->response?->json() ?? []);
+            $this->log($errorMessage, $exception->response?->json() ?? []);
+        } else {
+            $this->log($errorMessage, [
+                'code' => $exception->getCode(),
+                'trace' => $exception->getTraceAsString(),
+            ]);
         }
 
         return new Exception($errorMessage, $exception->getCode(), $exception);
@@ -194,7 +199,7 @@ class DiditLaravelClient
 
             $data = $response->json();
 
-            if (! isset($data['access_token'])) {
+            if (!isset($data['access_token'])) {
                 throw new Exception('Invalid response from auth server');
             }
 
@@ -358,7 +363,7 @@ class DiditLaravelClient
             throw new Exception('sessionId is required');
         }
 
-        if (! in_array($newStatus, ['Approved', 'Declined'])) {
+        if (!in_array($newStatus, ['Approved', 'Declined'])) {
             throw new Exception('newStatus must be either "Approved" or "Declined"');
         }
 
@@ -419,7 +424,7 @@ class DiditLaravelClient
         $timestamp = $headers['x-timestamp'] ?? null;
 
         // Ensure all required data is present
-        if (! $signature || ! $timestamp || empty($rawBody)) {
+        if (!$signature || !$timestamp || empty($rawBody)) {
             throw new Exception('Missing required webhook verification data');
         }
 
@@ -435,7 +440,7 @@ class DiditLaravelClient
         $expectedSignature = hash_hmac('sha256', $rawBody, $this->webhookSecret);
 
         // Compare using hash_equals for timing attack protection
-        if (! hash_equals($expectedSignature, $signature)) {
+        if (!hash_equals($expectedSignature, $signature)) {
             throw new Exception('Invalid webhook signature');
         }
 
