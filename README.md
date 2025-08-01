@@ -30,7 +30,7 @@ composer require awaisjameel/didit-laravel-client
 Publish the configuration file:
 
 ```bash
-php artisan vendor:publish --tag="didit-laravel-client-config"
+php artisan vendor:publish --provider="AwaisJameel\DiditLaravelClient\DiditLaravelClientServiceProvider"
 ```
 
 Add the following environment variables to your `.env` file:

@@ -6,7 +6,7 @@
         "laravel",
         "didit-laravel-client"
     ],
-    "version": "1.0.2-dev",
+    "version": "1.0.3-dev",
     "homepage": "https://github.com/awaisjameel/didit-laravel-client",
     "license": "MIT",
     "authors": [

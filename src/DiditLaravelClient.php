@@ -70,16 +70,16 @@ class DiditLaravelClient
     public function __construct(array $config = [])
     {
         // Required configuration
-        $this->clientId = $config['client_id'] ?? env('DIDIT_CLIENT_ID');
-        $this->clientSecret = $config['client_secret'] ?? env('DIDIT_CLIENT_SECRET');
-        $this->baseUrl = $config['base_url'] ?? env('DIDIT_BASE_URL', 'https://verification.didit.me');
-        $this->authUrl = $config['auth_url'] ?? env('DIDIT_AUTH_URL', 'https://apx.didit.me');
-        $this->webhookSecret = $config['webhook_secret'] ?? env('DIDIT_WEBHOOK_SECRET');
+        $this->clientId = $config['client_id'] ?? config('didit-laravel-client.client_id', env('DIDIT_CLIENT_ID'));
+        $this->clientSecret = $config['client_secret'] ?? config('didit-laravel-client.client_secret', env('DIDIT_CLIENT_SECRET'));
+        $this->baseUrl = $config['base_url'] ?? config('didit-laravel-client.base_url', env('DIDIT_BASE_URL', 'https://verification.didit.me'));
+        $this->authUrl = $config['auth_url'] ?? config('didit-laravel-client.auth_url', env('DIDIT_AUTH_URL', 'https://apx.didit.me'));
 
         // Optional configuration
-        $this->tokenExpiryBuffer = $config['token_expiry_buffer'] ?? 300; // 5 minutes buffer
-        $this->timeout = $config['timeout'] ?? 10; // 10 seconds
-        $this->debug = $config['debug'] ?? false;
+        $this->webhookSecret = $config['webhook_secret'] ?? config('didit-laravel-client.webhook_secret', env('DIDIT_WEBHOOK_SECRET'));
+        $this->timeout = $config['timeout'] ?? config('didit-laravel-client.timeout', env('DIDIT_TIMEOUT'));
+        $this->tokenExpiryBuffer = $config['token_expiry_buffer'] ?? config('didit-laravel-client.token_expiry_buffer', env('DIDIT_TOKEN_EXPIRY_BUFFER'));
+        $this->debug = $config['debug'] ?? config('didit-laravel-client.debug', env('DIDIT_DEBUG'));
 
         // Validate required configuration
         $this->validateConfig();

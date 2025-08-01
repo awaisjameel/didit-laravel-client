@@ -21,11 +21,11 @@ return [
     'auth_url' => env('DIDIT_AUTH_URL', 'https://apx.didit.me'),
 
     // Webhook verification
-    'webhook_secret' => env('DIDIT_WEBHOOK_SECRET'),
+    'webhook_secret' => env('DIDIT_WEBHOOK_SECRET', null),
 
     // Performance settings
     'timeout' => env('DIDIT_TIMEOUT', 10), // In seconds
-    'token_expiry_buffer' => env('DIDIT_TOKEN_EXPIRY_BUFFER', 300), // In seconds
+    'token_expiry_buffer' => env('DIDIT_TOKEN_EXPIRY_BUFFER', 300), // In seconds default 5 minutes
 
     // Debugging
     'debug' => env('DIDIT_DEBUG', false),
