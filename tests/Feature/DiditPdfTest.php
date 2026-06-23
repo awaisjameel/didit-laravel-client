@@ -5,24 +5,15 @@ use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
     $this->client = new DiditLaravelClient([
-        'client_id' => 'test-client-id',
-        'client_secret' => 'test-client-secret',
+        'api_key' => 'test-api-key',
         'base_url' => 'https://verification.didit.me',
-        'auth_url' => 'https://apx.didit.me',
-    ]);
-
-    Http::fake([
-        'apx.didit.me/auth/v2/token/*' => Http::response([
-            'access_token' => 'test-token',
-            'expires_in' => 3600,
-        ]),
     ]);
 });
 
 it('generates session PDF reports', function () {
     $pdfContent = 'PDF-CONTENT';
     Http::fake([
-        'verification.didit.me/v1/session/*/generate-pdf*' => Http::response($pdfContent, 200, [
+        'verification.didit.me/v3/session/*/generate-pdf*' => Http::response($pdfContent, 200, [
             'Content-Type' => 'application/pdf',
         ]),
     ]);
@@ -32,15 +23,16 @@ it('generates session PDF reports', function () {
     expect($pdf)->toBe($pdfContent);
 
     Http::assertSent(function ($request) {
-        return $request->url() === 'https://verification.didit.me/v1/session/test-session-id/generate-pdf/' &&
+        return $request->url() === 'https://verification.didit.me/v3/session/test-session-id/generate-pdf' &&
             $request->method() === 'GET' &&
+            $request->header('x-api-key')[0] === 'test-api-key' &&
             $request->header('Accept')[0] === 'application/pdf';
     });
 });
 
 it('handles PDF generation errors', function () {
     Http::fake([
-        'verification.didit.me/v1/session/*/generate-pdf*' => Http::response(null, 404),
+        'verification.didit.me/v3/session/*/generate-pdf*' => Http::response(null, 404),
     ]);
 
     expect(fn () => $this->client->generateSessionPDF('invalid-session-id'))

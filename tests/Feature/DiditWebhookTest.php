@@ -1,30 +1,38 @@
 <?php
 
 use AwaisJameel\DiditLaravelClient\DiditLaravelClient;
+use AwaisJameel\DiditLaravelClient\Events\DiditWebhookReceived;
+use AwaisJameel\DiditLaravelClient\Exceptions\WebhookVerificationException;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
 
 beforeEach(function () {
-    $this->client = new DiditLaravelClient([
-        'client_id' => 'test-client-id',
-        'client_secret' => 'test-client-secret',
-        'base_url' => 'https://verification.didit.me',
-        'auth_url' => 'https://apx.didit.me',
-        'webhook_secret' => 'test-webhook-secret',
-    ]);
+    $this->secret = 'test-webhook-secret';
 
-    $this->webhook_payload = json_encode([
-        'event' => 'verification.completed',
-        'session_id' => 'test-session-id',
-        'status' => 'approved',
+    $this->client = new DiditLaravelClient([
+        'api_key' => 'test-api-key',
+        'base_url' => 'https://verification.didit.me',
+        'webhook_secret' => $this->secret,
     ]);
 
     Carbon::setTestNow('2024-01-01 12:00:00');
     $this->timestamp = Carbon::now()->timestamp;
-    $this->signature = hash_hmac('sha256', $this->webhook_payload, 'test-webhook-secret');
+
+    // Keys are already in sorted order so the raw body matches the canonical
+    // form the V2 signature is computed over.
+    $this->webhook_payload = json_encode([
+        'session_id' => 'test-session-id',
+        'status' => 'Approved',
+        'timestamp' => $this->timestamp,
+        'vendor_data' => 'user-123',
+        'webhook_type' => 'status.updated',
+    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+    $this->signature = hash_hmac('sha256', $this->webhook_payload, $this->secret);
 });
 
-it('verifies valid webhook signatures', function () {
+it('verifies legacy (x-signature) webhook signatures', function () {
     $headers = [
         'x-signature' => $this->signature,
         'x-timestamp' => $this->timestamp,
@@ -32,11 +40,88 @@ it('verifies valid webhook signatures', function () {
 
     $result = $this->client->verifyWebhookSignature($headers, $this->webhook_payload);
 
-    expect($result)
-        ->toBeArray()
-        ->toHaveKey('event')
-        ->toHaveKey('session_id')
-        ->toHaveKey('status');
+    expect($result)->toBeArray()->toHaveKey('session_id');
+});
+
+it('verifies v2 webhook signatures', function () {
+    $signatureV2 = hash_hmac('sha256', "{$this->timestamp}:{$this->webhook_payload}", $this->secret);
+
+    $headers = [
+        'x-signature-v2' => $signatureV2,
+        'x-timestamp' => $this->timestamp,
+    ];
+
+    $result = $this->client->verifyWebhookSignature($headers, $this->webhook_payload);
+
+    expect($result)->toBeArray()->toHaveKey('webhook_type');
+});
+
+it('verifies v2 webhook signatures without the timestamp prefix', function () {
+    // The Didit demo signs the canonical body alone (no "{timestamp}:" prefix).
+    $signatureV2 = hash_hmac('sha256', $this->webhook_payload, $this->secret);
+
+    $headers = [
+        'x-signature-v2' => $signatureV2,
+        'x-timestamp' => $this->timestamp,
+    ];
+
+    $result = $this->client->verifyWebhookSignature($headers, $this->webhook_payload);
+
+    expect($result)->toBeArray()->toHaveKey('webhook_type');
+});
+
+it('verifies v2 signatures when the body keys are not pre-sorted', function () {
+    // Body keys are intentionally out of order; the client must canonicalize
+    // (sort keys) before hashing to match Didit's signature.
+    $unsortedBody = json_encode([
+        'webhook_type' => 'status.updated',
+        'status' => 'Approved',
+        'vendor_data' => 'user-123',
+        'session_id' => 'test-session-id',
+        'timestamp' => $this->timestamp,
+    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+    // Didit signs the canonical (sorted-key) form, so build that here.
+    $canonical = json_encode([
+        'session_id' => 'test-session-id',
+        'status' => 'Approved',
+        'timestamp' => $this->timestamp,
+        'vendor_data' => 'user-123',
+        'webhook_type' => 'status.updated',
+    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+    $signatureV2 = hash_hmac('sha256', "{$this->timestamp}:{$canonical}", $this->secret);
+
+    $headers = [
+        'x-signature-v2' => $signatureV2,
+        'x-timestamp' => $this->timestamp,
+    ];
+
+    $result = $this->client->verifyWebhookSignature($headers, $unsortedBody);
+
+    expect($result)->toBeArray()->toHaveKey('session_id');
+});
+
+it('verifies simple webhook signatures', function () {
+    $message = "{$this->timestamp}:test-session-id:Approved:status.updated";
+    $signatureSimple = hash_hmac('sha256', $message, $this->secret);
+
+    $headers = [
+        'x-signature-simple' => $signatureSimple,
+        'x-timestamp' => $this->timestamp,
+    ];
+
+    $result = $this->client->verifyWebhookSignature($headers, $this->webhook_payload);
+
+    expect($result)->toBeArray()->toHaveKey('status');
+});
+
+it('falls back to the timestamp in the payload body', function () {
+    $headers = ['x-signature' => $this->signature];
+
+    $result = $this->client->verifyWebhookSignature($headers, $this->webhook_payload);
+
+    expect($result)->toBeArray()->toHaveKey('session_id');
 });
 
 it('rejects invalid webhook signatures', function () {
@@ -46,7 +131,7 @@ it('rejects invalid webhook signatures', function () {
     ];
 
     expect(fn () => $this->client->verifyWebhookSignature($headers, $this->webhook_payload))
-        ->toThrow(Exception::class, 'Invalid webhook signature');
+        ->toThrow(WebhookVerificationException::class, 'Invalid webhook signature');
 });
 
 it('rejects stale webhook timestamps', function () {
@@ -79,7 +164,30 @@ it('processes valid webhook requests', function () {
 
     expect($result)
         ->toBeArray()
-        ->toHaveKey('event')
         ->toHaveKey('session_id')
         ->toHaveKey('status');
+});
+
+it('dispatches a DiditWebhookReceived event after processing', function () {
+    Event::fake();
+
+    $request = Request::create(
+        '/',
+        'POST',
+        [],
+        [],
+        [],
+        [
+            'HTTP_X_SIGNATURE' => $this->signature,
+            'HTTP_X_TIMESTAMP' => $this->timestamp,
+        ],
+        $this->webhook_payload
+    );
+
+    $this->client->processWebhook($request);
+
+    Event::assertDispatched(
+        DiditWebhookReceived::class,
+        fn (DiditWebhookReceived $event) => ($event->payload['session_id'] ?? null) === 'test-session-id'
+    );
 });
