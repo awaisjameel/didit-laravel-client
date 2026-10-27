@@ -1,6 +1,7 @@
 <?php
 
 use AwaisJameel\DiditLaravelClient\DiditLaravelClient;
+use AwaisJameel\DiditLaravelClient\Exceptions\DiditRequestException;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
@@ -107,4 +108,47 @@ it('updates session status', function () {
 it('rejects an invalid status', function () {
     expect(fn () => $this->client->updateSessionStatus('test-session-id', 'Bogus'))
         ->toThrow(Exception::class, 'newStatus must be one of');
+});
+
+it('preserves string zero identifiers and comments', function () {
+    Http::fake(['*' => Http::response(['session_id' => 'test-session-id'])]);
+
+    $this->client->createSession(vendorData: '0', options: ['workflow_id' => 'workflow-id']);
+    $this->client->updateSessionStatus('test-session-id', 'Approved', '0');
+
+    Http::assertSent(fn ($request) => $request->method() === 'POST' && $request['vendor_data'] === '0');
+    Http::assertSent(fn ($request) => $request->method() === 'PATCH' && $request['comment'] === '0');
+});
+
+it('encodes session identifiers as a single path segment', function () {
+    Http::fake(['*' => Http::response(['session_id' => 'test'])]);
+
+    $this->client->getSession('folder/id?query=value');
+
+    Http::assertSent(fn ($request) => $request->url() === 'https://verification.didit.me/v3/session/folder%2Fid%3Fquery%3Dvalue/decision/');
+});
+
+it('rejects malformed successful JSON responses without losing the response', function (string $body) {
+    Http::fake(['*' => Http::response($body, 200)]);
+
+    try {
+        $this->client->getSession('test-session-id');
+        $this->fail('Expected an invalid response exception.');
+    } catch (DiditRequestException $exception) {
+        expect($exception->status())->toBe(200)
+            ->and($exception->getPrevious())->toBeInstanceOf(JsonException::class);
+    }
+})->with(['', '<html>Gateway error</html>', '[]', 'null']);
+
+it('rejects redirects instead of forwarding API credentials', function () {
+    Http::fake(['verification.didit.me/*' => Http::response('', 302, ['Location' => 'https://other-host.invalid/'])]);
+
+    try {
+        $this->client->getSession('test-session-id');
+        $this->fail('Expected a redirect response to be rejected.');
+    } catch (DiditRequestException $exception) {
+        expect($exception->status())->toBe(302);
+    }
+
+    Http::assertSentCount(1);
 });

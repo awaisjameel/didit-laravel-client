@@ -18,8 +18,7 @@ class DiditLaravelClientServiceProvider extends PackageServiceProvider
 
     /**
      * Bind the client as a singleton so the facade and container resolve a
-     * single shared instance — keeping the legacy OAuth token cache warm across
-     * calls instead of re-authenticating on every resolution.
+     * single shared instance with the application's configuration.
      */
     public function packageRegistered(): void
     {

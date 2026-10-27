@@ -3,10 +3,18 @@
 namespace AwaisJameel\DiditLaravelClient\Tests;
 
 use AwaisJameel\DiditLaravelClient\DiditLaravelClientServiceProvider;
+use Illuminate\Support\Facades\Http;
 use Orchestra\Testbench\TestCase as Orchestra;
 
 class TestCase extends Orchestra
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Http::preventStrayRequests();
+    }
+
     protected function getPackageProviders($app)
     {
         return [
@@ -17,13 +25,10 @@ class TestCase extends Orchestra
     public function getEnvironmentSetUp($app)
     {
         config()->set('didit-laravel-client', [
-            'client_id' => 'test-client-id',
-            'client_secret' => 'test-client-secret',
+            'api_key' => 'test-api-key',
             'base_url' => 'https://verification.didit.me',
-            'auth_url' => 'https://apx.didit.me',
             'webhook_secret' => 'test-webhook-secret',
             'timeout' => 10,
-            'token_expiry_buffer' => 300,
             'debug' => false,
         ]);
     }

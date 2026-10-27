@@ -32,6 +32,10 @@ beforeEach(function () {
     $this->signature = hash_hmac('sha256', $this->webhook_payload, $this->secret);
 });
 
+afterEach(function () {
+    Carbon::setTestNow();
+});
+
 it('verifies legacy (x-signature) webhook signatures', function () {
     $headers = [
         'x-signature' => $this->signature,
@@ -44,7 +48,7 @@ it('verifies legacy (x-signature) webhook signatures', function () {
 });
 
 it('verifies v2 webhook signatures', function () {
-    $signatureV2 = hash_hmac('sha256', "{$this->timestamp}:{$this->webhook_payload}", $this->secret);
+    $signatureV2 = hash_hmac('sha256', $this->webhook_payload, $this->secret);
 
     $headers = [
         'x-signature-v2' => $signatureV2,
@@ -56,18 +60,16 @@ it('verifies v2 webhook signatures', function () {
     expect($result)->toBeArray()->toHaveKey('webhook_type');
 });
 
-it('verifies v2 webhook signatures without the timestamp prefix', function () {
-    // The Didit demo signs the canonical body alone (no "{timestamp}:" prefix).
-    $signatureV2 = hash_hmac('sha256', $this->webhook_payload, $this->secret);
+it('rejects obsolete timestamp-prefixed v2 signatures', function () {
+    $signatureV2 = hash_hmac('sha256', "{$this->timestamp}:{$this->webhook_payload}", $this->secret);
 
     $headers = [
         'x-signature-v2' => $signatureV2,
         'x-timestamp' => $this->timestamp,
     ];
 
-    $result = $this->client->verifyWebhookSignature($headers, $this->webhook_payload);
-
-    expect($result)->toBeArray()->toHaveKey('webhook_type');
+    expect(fn () => $this->client->verifyWebhookSignature($headers, $this->webhook_payload))
+        ->toThrow(WebhookVerificationException::class);
 });
 
 it('verifies v2 signatures when the body keys are not pre-sorted', function () {
@@ -90,7 +92,7 @@ it('verifies v2 signatures when the body keys are not pre-sorted', function () {
         'webhook_type' => 'status.updated',
     ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
-    $signatureV2 = hash_hmac('sha256', "{$this->timestamp}:{$canonical}", $this->secret);
+    $signatureV2 = hash_hmac('sha256', $canonical, $this->secret);
 
     $headers = [
         'x-signature-v2' => $signatureV2,
@@ -102,7 +104,7 @@ it('verifies v2 signatures when the body keys are not pre-sorted', function () {
     expect($result)->toBeArray()->toHaveKey('session_id');
 });
 
-it('verifies simple webhook signatures', function () {
+it('rejects simple-only webhook signatures', function () {
     $message = "{$this->timestamp}:test-session-id:Approved:status.updated";
     $signatureSimple = hash_hmac('sha256', $message, $this->secret);
 
@@ -111,9 +113,8 @@ it('verifies simple webhook signatures', function () {
         'x-timestamp' => $this->timestamp,
     ];
 
-    $result = $this->client->verifyWebhookSignature($headers, $this->webhook_payload);
-
-    expect($result)->toBeArray()->toHaveKey('status');
+    expect(fn () => $this->client->verifyWebhookSignature($headers, $this->webhook_payload))
+        ->toThrow(WebhookVerificationException::class);
 });
 
 it('falls back to the timestamp in the payload body', function () {
@@ -190,4 +191,121 @@ it('dispatches a DiditWebhookReceived event after processing', function () {
         DiditWebhookReceived::class,
         fn (DiditWebhookReceived $event) => ($event->payload['session_id'] ?? null) === 'test-session-id'
     );
+});
+
+it('rejects an expired signed payload even when the unsigned timestamp header is refreshed', function () {
+    $body = json_encode([
+        'session_id' => 'test-session-id',
+        'status' => 'Approved',
+        'timestamp' => $this->timestamp - 3600,
+        'webhook_type' => 'status.updated',
+    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+    foreach (['x-signature-v2', 'x-signature'] as $header) {
+        $signature = hash_hmac('sha256', $body, $this->secret);
+        expect(fn () => $this->client->verifyWebhookSignature([
+            $header => $signature,
+            'x-timestamp' => (string) $this->timestamp,
+        ], $body))->toThrow(WebhookVerificationException::class);
+    }
+});
+
+it('does not trust a decision authenticated only by the deprecated simple signature', function () {
+    $body = json_encode([
+        'session_id' => 'test-session-id',
+        'status' => 'Approved',
+        'timestamp' => $this->timestamp,
+        'webhook_type' => 'status.updated',
+        'decision' => ['id_verifications' => [['status' => 'Approved', 'full_name' => 'Tampered identity']]],
+    ]);
+    $signature = hash_hmac('sha256', "{$this->timestamp}:test-session-id:Approved:status.updated", $this->secret);
+
+    expect(fn () => $this->client->verifyWebhookSignature([
+        'x-signature-simple' => $signature,
+        'x-timestamp' => (string) $this->timestamp,
+    ], $body))->toThrow(WebhookVerificationException::class);
+});
+
+it('preserves empty objects and numeric object keys during canonical signature verification', function () {
+    $body = '{"status":"Approved","metadata":{"keys":{"2":"two","10":"ten"},"empty":{}},"timestamp":'.$this->timestamp.',"session_id":"test-session-id"}';
+    $canonical = '{"metadata":{"empty":{},"keys":{"10":"ten","2":"two"}},"session_id":"test-session-id","status":"Approved","timestamp":'.$this->timestamp.'}';
+
+    expect($this->client->verifyWebhookSignature([
+        'x-signature-v2' => hash_hmac('sha256', $canonical, $this->secret),
+        'x-timestamp' => (string) $this->timestamp,
+    ], $body))->toHaveKey('session_id', 'test-session-id');
+});
+
+it('accepts the previous full-payload signature during the documented secret rotation window', function () {
+    expect($this->client->verifyWebhookSignature([
+        'x-signature-v2' => str_repeat('0', 64),
+        'x-signature-v2-previous' => hash_hmac('sha256', $this->webhook_payload, $this->secret),
+        'x-timestamp' => (string) $this->timestamp,
+    ], $this->webhook_payload))->toHaveKey('session_id', 'test-session-id');
+});
+
+it('does not fall back to a simple signature when a full-payload signature fails', function () {
+    $simple = hash_hmac('sha256', "{$this->timestamp}:test-session-id:Approved:status.updated", $this->secret);
+
+    expect(fn () => $this->client->verifyWebhookSignature([
+        'x-signature-v2' => str_repeat('0', 64),
+        'x-signature-simple' => $simple,
+        'x-timestamp' => (string) $this->timestamp,
+    ], $this->webhook_payload))->toThrow(WebhookVerificationException::class);
+});
+
+it('rejects unsupported timestamp values even with a correct full-payload signature', function (mixed $timestamp) {
+    $body = json_encode(['timestamp' => $timestamp]);
+
+    expect(fn () => $this->client->verifyWebhookSignature([
+        'x-signature' => hash_hmac('sha256', $body, $this->secret),
+    ], $body))->toThrow(WebhookVerificationException::class);
+})->with([[null], [true], [[]], ['now'], ['99999999999999999999999999']]);
+
+it('accepts signed legacy ISO timestamps without trusting an unsigned replacement', function () {
+    $body = json_encode(['created_at' => '2024-01-01T12:00:00Z', 'session_id' => 'test']);
+
+    expect($this->client->verifyWebhookSignature([
+        'x-signature' => hash_hmac('sha256', $body, $this->secret),
+    ], $body))->toHaveKey('session_id', 'test');
+});
+
+it('rejects ambiguous duplicate header casing', function () {
+    expect(fn () => $this->client->verifyWebhookSignature([
+        'X-Signature' => $this->signature,
+        'x-signature' => str_repeat('0', 64),
+    ], $this->webhook_payload))->toThrow(WebhookVerificationException::class, 'Ambiguous');
+});
+
+it('does not dispatch an event for an unverified request', function () {
+    Event::fake();
+    $request = Request::create('/', 'POST', server: ['HTTP_X_SIGNATURE' => str_repeat('0', 64)], content: $this->webhook_payload);
+
+    try {
+        $this->client->processWebhook($request);
+        $this->fail('Expected invalid signature rejection.');
+    } catch (WebhookVerificationException) {
+        Event::assertNotDispatched(DiditWebhookReceived::class);
+    }
+});
+
+it('canonicalizes Unicode line separators without escaping them', function () {
+    $body = '{"timestamp":'.$this->timestamp.',"metadata":{"name":"José\u2028example"}}';
+    $canonical = '{"metadata":{"name":"José'."\u{2028}".'example"},"timestamp":'.$this->timestamp.'}';
+
+    expect($this->client->verifyWebhookSignature([
+        'X-Signature-V2' => strtoupper(hash_hmac('sha256', $canonical, $this->secret)),
+    ], $body)['metadata']['name'])->toBe("José\u{2028}example");
+});
+
+it('collects previous-secret headers when processing a Laravel request', function () {
+    Event::fake();
+    $request = Request::create('/', 'POST', server: [
+        'HTTP_X_SIGNATURE_PREVIOUS' => $this->signature,
+        'HTTP_X_TIMESTAMP' => (string) $this->timestamp,
+    ], content: $this->webhook_payload);
+
+    $this->client->processWebhook($request);
+
+    Event::assertDispatched(DiditWebhookReceived::class);
 });

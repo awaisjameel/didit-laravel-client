@@ -1,7 +1,6 @@
 <?php
 
 use AwaisJameel\DiditLaravelClient\DiditLaravelClient;
-use AwaisJameel\DiditLaravelClient\Exceptions\DiditAuthenticationException;
 use AwaisJameel\DiditLaravelClient\Exceptions\DiditConfigurationException;
 use AwaisJameel\DiditLaravelClient\Exceptions\DiditException;
 use AwaisJameel\DiditLaravelClient\Exceptions\DiditRequestException;
@@ -43,20 +42,4 @@ it('throws a request exception carrying the HTTP response on API failure', funct
             ->and($exception->status())->toBe(404)
             ->and($exception->getResponse())->not->toBeNull();
     }
-});
-
-it('throws an authentication exception when the OAuth flow fails', function () {
-    Http::fake([
-        'apx.didit.me/auth/v2/token/*' => Http::response(['error' => 'invalid_client'], 401),
-    ]);
-
-    $client = new DiditLaravelClient([
-        'client_id' => 'test-client-id',
-        'client_secret' => 'test-client-secret',
-        'base_url' => 'https://verification.didit.me',
-        'auth_url' => 'https://apx.didit.me',
-    ]);
-
-    expect(fn () => $client->getAccessToken())
-        ->toThrow(DiditAuthenticationException::class);
 });
