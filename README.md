@@ -2,22 +2,41 @@
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/awaisjameel/didit-laravel-client.svg?style=flat-square)](https://packagist.org/packages/awaisjameel/didit-laravel-client)
 [![GitHub Tests Action Status](https://img.shields.io/github/actions/workflow/status/awaisjameel/didit-laravel-client/run-tests.yml?branch=main&label=tests&style=flat-square)](https://github.com/awaisjameel/didit-laravel-client/actions?query=workflow%3Arun-tests+branch%3Amain)
-[![GitHub Code Style Action Status](https://img.shields.io/github/actions/workflow/status/awaisjameel/didit-laravel-client/fix-php-code-style-issues.yml?branch=main&label=code%20style&style=flat-square)](https://github.com/awaisjameel/didit-laravel-client/actions?query=workflow%3A"Fix+PHP+code+style+issues"+branch%3Amain)
 [![Total Downloads](https://img.shields.io/packagist/dt/awaisjameel/didit-laravel-client.svg?style=flat-square)](https://packagist.org/packages/awaisjameel/didit-laravel-client)
 
 A Laravel client library for integrating with the DiDiT verification API (v3). This client handles authentication, session management, PDF report generation, and webhook processing.
 
 ## Features
 
--   🔐 API key authentication (`x-api-key`), with a legacy OAuth2 fallback
+-   🔐 API key authentication (`x-api-key`)
 -   🔄 Session management (create, retrieve, update) on the Didit **v3** API
 -   🧩 Workflow-based sessions (`workflow_id`)
 -   📄 PDF report generation
--   🔗 Webhook processing with multiple signature schemes (V2, Simple, legacy)
+-   🔗 Full-payload webhook signatures (V2 and raw-body), including secret rotation
 -   📣 `DiditWebhookReceived` event for listener-based webhook handling
 -   🛡️ Timing-attack-safe signature verification
 -   🧯 Typed exception hierarchy (`DiditException` and friends)
 -   📝 Comprehensive logging options
+
+## Requirements and upgrading to 3.0
+
+PHP 8.2–8.5 with Laravel 12, or PHP 8.3–8.5 with Laravel 13.
+
+Version 3 requires `DIDIT_API_KEY`. The legacy OAuth2 fallback, `getAccessToken()`,
+`DiditAuthenticationException`, and OAuth configuration keys have been removed.
+API authentication failures are `DiditRequestException` instances; inspect
+`status()` for the HTTP status.
+
+Webhooks require a full-payload `X-Signature-V2` or `X-Signature`, including their
+`-Previous` variants during Didit's secret rotation window. Simple-only signatures
+and the old timestamp-prefixed V2 variant are rejected. Freshness is checked against
+the signed body's `timestamp` (or signed legacy `created_at`); a supplied
+`X-Timestamp` must match it. The current protocol is documented in
+[Didit's webhook guide](https://docs.didit.me/integration/webhooks).
+
+Successful JSON endpoints must return JSON objects, PDF responses must start with
+`%PDF`, and HTTP redirects are rejected. Session identifiers are encoded as path
+segments. Existing create/retrieve/update/PDF method names remain available.
 
 ## Installation
 
@@ -55,31 +74,25 @@ DIDIT_WEBHOOK_SECRET=your-webhook-secret
 DIDIT_TIMEOUT=10
 DIDIT_DEBUG=false
 
-# Legacy OAuth2 fallback — only needed if you are NOT using an API key
-# DIDIT_CLIENT_ID=your-client-id
-# DIDIT_CLIENT_SECRET=your-client-secret
-# DIDIT_AUTH_URL=https://apx.didit.me
-# DIDIT_TOKEN_EXPIRY_BUFFER=300
 ```
 
 > **Authentication:** The current Didit API authenticates with a single API key sent in the
-> `x-api-key` header — just set `DIDIT_API_KEY`. The legacy OAuth2 `client_credentials`
-> flow is used automatically only when no API key is configured.
+> `x-api-key` header — set `DIDIT_API_KEY` as described in
+> [Didit's authentication guide](https://docs.didit.me/getting-started/api-authentication).
 
 ## Usage
 
 ### Basic Setup
 
 ```php
-use AwaisJameel\DiditLaravelClient\Facades\DiditLaravelClient;
-// or
+use AwaisJameel\DiditLaravelClient\Facades\DiditLaravelClient as Didit;
 use AwaisJameel\DiditLaravelClient\DiditLaravelClient;
 
 // Resolve the shared instance from the container (reads config/.env)
 $client = app(DiditLaravelClient::class);
 
 // Or call methods statically through the facade
-DiditLaravelClient::createSession(/* ... */);
+Didit::createSession(/* ... */);
 
 // Or create a new instance with custom configuration
 $client = new DiditLaravelClient([
@@ -101,7 +114,7 @@ $session = $client->createSession(
         'workflow_id' => 'your-workflow-uuid', // falls back to DIDIT_WORKFLOW_ID
         // Any other v3 session fields, e.g.:
         // 'callback_method' => 'both',
-        // 'metadata' => json_encode(['plan' => 'pro']),
+        // 'metadata' => ['plan' => 'pro'],
         // 'contact_details' => ['email' => 'jane@example.com'],
         // 'expected_details' => ['first_name' => 'Jane', 'last_name' => 'Doe'],
     ]
@@ -163,26 +176,38 @@ return response($pdfContent)
 
 ### Handling Webhooks
 
-Set up your webhook route in `routes/web.php`:
+Register the webhook in your application's API routes (normally `routes/api.php`)
+so browser CSRF middleware does not reject provider deliveries. With Laravel's
+default API prefix, configure Didit's destination as `https://your-app.com/api/didit/webhook`.
+If API routes are not enabled, register the file through `withRouting(api: ...)`
+in `bootstrap/app.php` as described in [Laravel's routing documentation](https://laravel.com/docs/13.x/routing).
 
 ```php
+use AwaisJameel\DiditLaravelClient\Exceptions\WebhookVerificationException;
+use AwaisJameel\DiditLaravelClient\Facades\DiditLaravelClient;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+
 Route::post('didit/webhook', function (Request $request) {
-    $payload = DiditLaravelClient::processWebhook($request);
+    try {
+        DiditLaravelClient::processWebhook($request);
+    } catch (WebhookVerificationException) {
+        abort(401, 'Invalid webhook');
+    }
 
-    // Handle different webhook events by status / type
-    match($payload['status'] ?? null) {
-        'Approved' => handleApproved($payload),
-        'Declined' => handleDeclined($payload),
-        default => handleOther($payload)
-    };
-
-    return response()->json(['status' => 'processed']);
+    return response()->json(['received' => true]);
 });
 ```
 
-`processWebhook()` automatically tries every signature scheme Didit sends
-(`x-signature-v2`, `x-signature-simple`, then the legacy `x-signature`) and
-validates the request freshness using `x-timestamp`.
+`processWebhook()` verifies the complete payload and its signed timestamp before
+dispatching `DiditWebhookReceived`. Use the event listener for application-specific
+processing; queue slow work so the route responds quickly. Use `event_id` for
+idempotency, because legitimate provider retries may dispatch the same event again.
+
+Pass the untouched request body and both full-payload signature headers. Keep PHP's
+`serialize_precision=-1` default for V2 numeric encoding. If canonical encoding
+differs, the raw-body signature can verify the original bytes; middleware must not
+re-encode them. See [Didit's PHP webhook guidance](https://docs.didit.me/integration/webhooks#php--laravel-recommended-x-signature-v2).
 
 #### Listening for webhook events
 
@@ -209,7 +234,8 @@ Manual webhook signature verification:
 $headers = [
     'x-signature' => $request->header('x-signature'),
     'x-signature-v2' => $request->header('x-signature-v2'),
-    'x-signature-simple' => $request->header('x-signature-simple'),
+    'x-signature-v2-previous' => $request->header('x-signature-v2-previous'),
+    'x-signature-previous' => $request->header('x-signature-previous'),
     'x-timestamp' => $request->header('x-timestamp'),
 ];
 
@@ -231,8 +257,7 @@ narrowly. Every package exception extends `DiditException`, which itself extends
 | Exception | When it's thrown |
 | --- | --- |
 | `DiditException` | Base class — catch this to handle any DiDiT failure |
-| `DiditConfigurationException` | Missing config (API key/OAuth credentials, base URL, `workflow_id`, webhook secret) |
-| `DiditAuthenticationException` | Legacy OAuth2 token request failed |
+| `DiditConfigurationException` | Missing or invalid API key, base URL, timeout, `workflow_id`, or webhook secret |
 | `DiditRequestException` | An API request failed (non-2xx or transport error); exposes `getResponse()` and `status()` |
 | `WebhookVerificationException` | Webhook body/signature/timestamp could not be verified |
 
@@ -249,7 +274,7 @@ try {
     // Inspect the HTTP response from Didit
     Log::error('DiDiT API Error', [
         'status' => $e->status(),
-        'body' => optional($e->getResponse())->json(),
+        'message' => $e->getMessage(),
     ]);
 } catch (DiditException $e) {
     // Any other DiDiT failure (config, auth, webhook, ...)
@@ -274,15 +299,8 @@ $client = new DiditLaravelClient([
 
 Debug logs will include:
 
--   API requests and responses
--   Token management events
--   Webhook processing details
--   Error details
-
-> ⚠️ **Debug logs may contain PII.** When `DIDIT_DEBUG=true`, verification
-> payloads and API responses (which can include personal/identity data) are
-> written to your application log. Keep debug mode off in production, or ensure
-> your logs are access-controlled and retained appropriately.
+-   Webhook event types after verification
+-   Error classes and HTTP status codes
 
 ## Testing
 
@@ -294,11 +312,11 @@ composer test
 
 ## Security
 
--   All API requests use HTTPS
--   Webhook signatures are verified using HMAC SHA-256 (V2, Simple and legacy schemes)
+-   The default API endpoint uses HTTPS
+-   Full-payload webhook signatures use HMAC SHA-256 (V2 or raw-body)
 -   Timing attack safe signature comparison
--   API key sent via the `x-api-key` header. On the legacy OAuth fallback, access tokens are cached through Laravel's cache store (shared across requests/workers) and refreshed automatically before expiry
--   Request timestamp validation (rejects stale webhooks older than 5 minutes)
+-   API keys are sent in the `x-api-key` header; redirects are rejected
+-   Signed payload timestamps must be within five minutes of the current time
 
 ## Contributing
 
@@ -307,7 +325,7 @@ Please see [CONTRIBUTING](CONTRIBUTING.md) for details.
 ## Credits
 
 -   [Awais Jameel](https://github.com/awaisjameel)
--   [All Contributors](../../contributors)
+-   [All Contributors](https://github.com/awaisjameel/didit-laravel-client/graphs/contributors)
 
 ## License
 
